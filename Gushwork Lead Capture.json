@@ -1,0 +1,440 @@
+{
+  "name": "Gushwork Lead Capture",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json.body;\n\nreturn [{\n  json: {\n    ...body\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "a677f4d9-c8b2-489a-be47-158caee8f861",
+      "name": "Normalising Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = items[0].json;\n\n// Require at least one contact method\nconst hasContact = Boolean(lead.email || lead.phone);\n\nif (!hasContact) {\n  return []; // stop workflow for invalid leads\n}\n\nreturn [{\n  json: {\n    ...lead,\n    created_at: lead.timestamp,\n    updated_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "484c9b59-4b79-4a53-84ac-d59a40c03619",
+      "name": "Lead Validation"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = items[0].json;\nlet score = 0;\n\n// --------------------\n// A. Contact Quality (Max 30)\n// --------------------\nif (lead.email) score += 10;\n\nif (lead.email && !/gmail|yahoo|hotmail/i.test(lead.email)) {\n  score += 5;\n}\n\nif (lead.phone) score += 10;\n\nif (lead.phone && lead.phone.length >= 10) {\n  score += 5;\n}\n\n// --------------------\n// B. Message Quality & Intent (Max 30)\n// --------------------\nconst message = (lead.message || \"\").toLowerCase();\n\nif (message.length >= 20) score += 10;\n\nif (/pricing|quote|demo/.test(message)) {\n  score += 10;\n}\n\nif (/product|service|manufacturing|tool/.test(message)) {\n  score += 10;\n}\n\n// --------------------\n// C. Identity Signals (Max 20)\n// --------------------\nif (lead.name) score += 5;\n\nif (lead.name && !/test|demo|abc/i.test(lead.name)) {\n  score += 5;\n}\n\nif (lead.email && !/test|asdf/i.test(lead.email)) {\n  score += 10;\n}\n\n// --------------------\n// D. Risk Penalties (Min -20)\n// --------------------\nif (message.length < 5) score -= 10;\n\nif (lead.phone && /^(.)\\1+$/.test(lead.phone)) {\n  score -= 5;\n}\n\nif (lead.email && /example/i.test(lead.email)) {\n  score -= 5;\n}\n\n// --------------------\n// Clamp score between 0 and 100\n// --------------------\nscore = Math.max(0, Math.min(score, 100));\n\nreturn [{\n  json: {\n    ...lead,\n    lead_score: score\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "0be82860-33e8-4e2b-aa48-89df6d8291d9",
+      "name": "Lead Confidence Scoring"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6848af3f-7c64-4010-9eb5-e4c7bf4aa6f8",
+        "options": {
+          "allowedOrigins": "*",
+          "responseData": "{   \"success\": true }",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              },
+              {
+                "name": "Access-Control-Max-Age",
+                "value": "86400"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6cf652ea-4744-4a66-b42b-eb4b5b9e6301",
+      "name": "Webhook -POST",
+      "webhookId": "6848af3f-7c64-4010-9eb5-e4c7bf4aa6f8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "172e5b81-db7c-4428-9e3c-9c7cf7297b12",
+              "name": "Status",
+              "value": "={{ $json.lead_score >= 70 ? \"New Lead\" : \"Possible Spam\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "fabeea36-06c8-422c-ad63-b13e6895e943",
+      "name": "Lead Fields Enrichment"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "025c849d-1381-4b08-8046-c95d2722e561",
+              "name": "Status",
+              "value": "={{ $json.lead_score >= 70 ? \"New Lead\" : \"Possible Spam\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "86864d2c-a918-4f89-8802-3528114a8fef",
+      "name": "Setting Lead Status & Metadata"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "126Kl1rHIBwcs9GJZCdblw5O_xqBYXqt5SheJOsD-NWw",
+          "mode": "list",
+          "cachedResultName": "Gushwork Lead Intake",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/126Kl1rHIBwcs9GJZCdblw5O_xqBYXqt5SheJOsD-NWw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 547803564,
+          "mode": "list",
+          "cachedResultName": "Lead InTake",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/126Kl1rHIBwcs9GJZCdblw5O_xqBYXqt5SheJOsD-NWw/edit#gid=547803564"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "Email": "={{ $json.email }}",
+            "Phone": "={{ $json.phone }}",
+            "Message": "={{ $json.message }}",
+            "Source URL": "={{ $json.source_url }}",
+            "Lead Score": "={{ $json.lead_score }}",
+            "Customer Name": "={{ $('Lead Confidence Scoring').item.json.customer_name }}",
+            "Created At": "={{ $('Lead Confidence Scoring').item.json.created_at }}",
+            "Updated At": "={{ $('Lead Confidence Scoring').item.json.updated_at }}",
+            "Status": "={{ $json.Status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lead Score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Source URL",
+              "displayName": "Source URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Created At",
+              "displayName": "Created At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Updated At",
+              "displayName": "Updated At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "40edfd86-9d09-41e1-8688-d03c7142b59c",
+      "name": "Storing Leads In G Sheets",
+      "credentials": {
+        "googleApi": {
+          "id": "BYqodYfR8qb6SONn",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1cd94c55-a026-4157-aad0-ccfdf921a3bf",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "New Lead",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "c251e22c-d294-4ba3-b2dc-2147d4e8437d",
+      "name": "Routing Leads by Status"
+    },
+    {
+      "parameters": {
+        "fromEmail": "sameermehra1505@gmail.com",
+        "toEmail": "sameer9891020235@gmail.com",
+        "subject": "=New Lead Received – {{$node[\"Storing Leads In G Sheets\"].json[\"Customer Name\"]}}\n",
+        "html": "=<h2>New Lead Captured</h2>\n\n<p><strong>Name:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Name\"]}}</p>\n<p><strong>Email:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Email\"]}}</p>\n<p><strong>Phone:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Phone\"]}}</p>\n<p><strong>Message:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Message\"]}}</p>\n\n<hr />\n\n<p><strong>Lead Score:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Lead Score\"]}}</p>\n<p><strong>Status:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Status\"]}}</p>\n\n<p><strong>Source URL:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Source URL\"]}}</p>\n<p><strong>Customer:</strong> {{$node[\"Storing Leads In G Sheets\"].json[\"Customer Name\"]}}</p>\n\n<p><em>Captured at {{$node[\"Storing Leads In G Sheets\"].json[\"Created At\"]}}</em></p>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1664,
+        -96
+      ],
+      "id": "6e669221-c7b9-4d3e-9534-91df2978a067",
+      "name": "Notifying Sales Team trhough Email",
+      "webhookId": "320669dd-8aa8-4b8a-b950-91f1cca19ec6",
+      "credentials": {
+        "smtp": {
+          "id": "ZRfhagynlZ1xAhtl",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Normalising Payload": {
+      "main": [
+        [
+          {
+            "node": "Lead Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Validation": {
+      "main": [
+        [
+          {
+            "node": "Lead Confidence Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Confidence Scoring": {
+      "main": [
+        [
+          {
+            "node": "Lead Fields Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook -POST": {
+      "main": [
+        [
+          {
+            "node": "Normalising Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Fields Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Setting Lead Status & Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setting Lead Status & Metadata": {
+      "main": [
+        [
+          {
+            "node": "Storing Leads In G Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Storing Leads In G Sheets": {
+      "main": [
+        [
+          {
+            "node": "Routing Leads by Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing Leads by Status": {
+      "main": [
+        [
+          {
+            "node": "Notifying Sales Team trhough Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "cea81e15-7f95-4909-bf26-aaac5106bc26",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "801ba1c2d627c3568a3d2ce56fa6403812b7efa56f5babd2fd19a8245f2bc1a5"
+  },
+  "id": "xXr2zpPlkiYPJiZ52rJQp",
+  "tags": []
+}
