@@ -1,11 +1,11 @@
 # Gushwork – Lead Capture & Automation System
 
 An end-to-end lead capture and processing system that simulates a real-world production workflow using a frontend web form and n8n automation.
-Could have used dummy data and tested out the workflow and submitted the assignment. But wanted to give it a ###Real World Scenario Feel
+Could have used dummy data and tested out the workflow and submitted the assignment. But wanted to give it a Real World Scenario Feel :)
 
 
 ## Overview
-This project was built to demonstrate how a real lead capture system works in production.
+This project is built to demonstrate how a real lead capture system works in production.
 Instead of generating dummy data manually, the system captures real user input from a live webpage, processes it through an automation pipeline, validates and scores the lead, stores it, and notifies the sales team only when appropriate.
 
 ## What’s Included
